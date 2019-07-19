@@ -9,8 +9,6 @@ def create_database_connection(db_params):
 
     connection = psycopg2.connect("dbname=%s user=%s port=%s host=%s password=%s" %(db_params['database_name'], db_params['user'], db_params['port'], db_params['host'], db_params['password']))
 
-    connection.autocommit = True
-
     return connection
 
 
@@ -26,6 +24,9 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
             # return an error to the user
             return
         database_connection = create_database_connection(connection_parameters)
+
+    # allow all calls to be committed when they are run
+    database_connection.autocommit = True
 
     # create cursor to access database
     cursor = database_connection.cursor()
@@ -68,10 +69,12 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
 
     else:
         # if join result is to find a single area rather than multiple
-
-        # there should be some pre-processing in here before the spatial join runs
+        # create fields in dataset to join areas to
+        # for field in fields_to_join:
+        cursor.execute(sql.SQL('ALTER TABLE {} ADD IF NOT EXISTS lads character varying[];').format(sql.Identifier(dataset)))
+        cursor.execute(sql.SQL('ALTER TABLE {} ADD IF NOT EXISTS gors character varying[];').format(sql.Identifier(dataset)))
 
         # run spatial join
-        cursor.execute(sql.SQL('UPDATE {0} a SET lad = b.lad_code, gor = b.gor_code FROM ftables.{1} b WHERE ST_Contains(b.{2}, a.centroid);').format(sql.Identifier(dataset), sql.Identifier(areas_to_join), sql.Identifier(dataset_geom_field)))
+        cursor.execute(sql.SQL('UPDATE {0} a SET lad = b.lad_code, gor = b.gor_code FROM ftables.{1} b WHERE ST_Intersects(b.{2}, a.centroid);').format(sql.Identifier(dataset), sql.Identifier(areas_to_join), sql.Identifier(dataset_geom_field)))
 
     return True
