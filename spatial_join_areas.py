@@ -36,7 +36,18 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
     if join_multiple_areas:
         # run join
         if join_data_is_areas:
-            cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(st_area(st_intersection(b.{1}, t.{2})) / st_area(b.{3})) as coverage, ARRAY_AGG(t.geo_code) as lads, ARRAY_AGG(t.geo_code_gor) as gors INTO {9} FROM ftables.{4} t, {5} b WHERE st_intersects(b.{6}, t.{7}) GROUP BY b.{8};').format(sql.Identifier(dataset_id_field), sql.Identifier(dataset_geom_field), sql.Identifier(join_areas_geom_field), sql.Identifier(dataset_geom_field), sql.Identifier(areas_to_join), sql.Identifier(dataset), sql.Identifier(dataset_geom_field), sql.Identifier(join_areas_geom_field), sql.Identifier(temp_table)), [])
+            cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(st_area(st_intersection(b.{1}, t.{2})) / st_area(b.{3})) as coverage, ARRAY_AGG(t.geo_code) as lads, ARRAY_AGG(t.geo_code_gor) as gors INTO {9} FROM ftables.{4} t, {5} b WHERE st_intersects(b.{6}, t.{7}) GROUP BY b.{8};').format(
+                sql.Identifier(dataset_id_field),  # 0
+                sql.Identifier(dataset_geom_field),  # 1
+                sql.Identifier(join_areas_geom_field),  # 2
+                sql.Identifier(dataset_geom_field),  # 3
+                sql.Identifier(areas_to_join),  # 4
+                sql.Identifier(dataset),  # 5
+                sql.Identifier(dataset_geom_field),  # 6
+                sql.Identifier(join_areas_geom_field),  # 7
+                sql.Identifier(dataset_id_field),  # 8
+                sql.Identifier(temp_table)),  # 9
+                [])
         else:
             #print('Running line & point join')
             #cursor.execute(sql.SQL('SELECT b.{0} as gid INTO {2} FROM {1} b;').format(sql.Identifier('gid'), sql.Identifier(dataset), sql.Identifier('_temp')))
