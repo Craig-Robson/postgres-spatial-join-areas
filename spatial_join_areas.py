@@ -19,10 +19,11 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
     fields_to_join:
      - [{name:xxx, type:xxx},{name:yyy, type:yyy}]
     """
+    print('In main')
     if database_connection is None:
         if connection_parameters is None:
             # return an error to the user
-            return
+            return 'fail'
         database_connection = create_database_connection(connection_parameters)
 
     # allow all calls to be committed when they are run
@@ -51,7 +52,9 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
         else:
             #print('Running line & point join')
             #cursor.execute(sql.SQL('SELECT b.{0} as gid INTO {2} FROM {1} b;').format(sql.Identifier('gid'), sql.Identifier(dataset), sql.Identifier('_temp')))
-            cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(t.geo_code) as lads, ARRAY_AGG(t.geo_code_gor) as gors INTO {5} FROM ftables.{1} t, {2} b WHERE st_intersects(b.{3}, t.{4}) GROUP BY b.{6};').format(sql.Identifier(dataset_id_field), sql.Identifier(areas_to_join), sql.Identifier(dataset), sql.Identifier(dataset_geom_field), sql.Identifier(join_areas_geom_field), sql.Identifier(temp_table), sql.Identifier(dataset_id_field)))
+            cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(t.geo_code) as lads, ARRAY_AGG(t.geo_code_gor) as gors INTO {5} FROM ftables.{1} t, {2} b WHERE st_intersects(b.{3}, t.{4}) GROUP BY b.{6};').format(
+		sql.Identifier(dataset_id_field), sql.Identifier(areas_to_join), sql.Identifier(dataset), sql.Identifier(dataset_geom_field), sql.Identifier(join_areas_geom_field), sql.Identifier(temp_table), sql.Identifier(dataset_id_field)))
+
         #print('Generated temp table')
         # create fields in dataset to join areas to
         #for field in fields_to_join:
@@ -82,10 +85,12 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
         # if join result is to find a single area rather than multiple
         # create fields in dataset to join areas to
         # for field in fields_to_join:
-        cursor.execute(sql.SQL('ALTER TABLE {} ADD IF NOT EXISTS lads character varying[];').format(sql.Identifier(dataset)))
-        cursor.execute(sql.SQL('ALTER TABLE {} ADD IF NOT EXISTS gors character varying[];').format(sql.Identifier(dataset)))
+        cursor.execute(sql.SQL('ALTER TABLE {} ADD IF NOT EXISTS lad character varying;').format(sql.Identifier(dataset)))
+        cursor.execute(sql.SQL('ALTER TABLE {} ADD IF NOT EXISTS gor character varying;').format(sql.Identifier(dataset)))
 
         # run spatial join
-        cursor.execute(sql.SQL('UPDATE {0} a SET lad = b.lad_code, gor = b.gor_code FROM ftables.{1} b WHERE ST_Intersects(b.{2}, a.centroid);').format(sql.Identifier(dataset), sql.Identifier(areas_to_join), sql.Identifier(dataset_geom_field)))
+        cursor.execute(sql.SQL('UPDATE {0} a SET lad = b.lad_code, gor = b.gor_code FROM ftables.{1} b WHERE ST_Intersects(b.{2}, a.geom);').format(sql.Identifier(dataset), sql.Identifier(areas_to_join), sql.Identifier(dataset_geom_field)))
 
     return True
+
+print('here')
