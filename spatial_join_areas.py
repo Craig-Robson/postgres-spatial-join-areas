@@ -12,6 +12,55 @@ def create_database_connection(db_params):
     return connection
 
 
+def check_fields_to_join(fields_to_join):
+    """Check which fields have been passed to be joined
+    """
+    if 'oa' in fields_to_join: oa = True
+    else: oa = False
+
+    if 'lad' in fields_to_join: lad = True
+    else: lad = False
+
+    if 'gor' in fields_to_join: gor = True
+    else: gor = False
+
+    return oa, lad, gor
+
+
+def get_srid(database_connection, table, geom)
+    """Get the SRID of a dataset
+    """
+
+    # create cursor to access database
+    cursor = database_connection.cursor()
+
+    # run query to get srid
+    cursor.execute(sql.SQL('SELECT ST_SRID(%s) FROM {} LIMIT 1').format(sql.Identifier(table)), [geom])
+
+    # fetch query result
+    srid = cursor.fetchone()
+
+    cursor.close()
+
+    # return
+    return srid
+
+
+def check_the_srid_of_the_data(database_connection, dataset_name, dataset_geom_field, join_dataset, join_dataset_geom_field):
+    """Check the SRID of both geometries is the same
+    """
+    # get srid of dataset
+    srid_data = get_srid(database_connection, dataset_name, dataset_geom_field)
+
+    # get srid of areas to join
+    srid_join_areas = get_srid(database_connection, join_dataset, join_dataset_geom_field)
+
+    # compare srid's
+    if srid_data != srid_join_areas:
+        return False
+
+    return True
+
 def main(database_connection=None, connection_parameters=None, dataset='', join_multiple_areas=True, areas_to_join='', join_data_is_areas=True, fields_to_join=[], dataset_id_field='gid', join_areas_id_field='gid', dataset_geom_field='geom', join_areas_geom_field='geom'):
     """
     Run the spatial join over two tables existing in a postgres database.
@@ -19,15 +68,30 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
     fields_to_join:
      - [{name:xxx, type:xxx},{name:yyy, type:yyy}]
     """
-    print('In main')
+
+    # check if a connection has been passed
     if database_connection is None:
+
+        # if no connection, check database parameters has been passed
         if connection_parameters is None:
-            # return an error to the user
-            return 'fail'
+            # return an error to the user if parameters haven't been passed either
+            return False, 'No database connection passed or database connection parameters. At least one should be sent.'
+
+        # create a database connection using the passed parameters
         database_connection = create_database_connection(connection_parameters)
 
     # allow all calls to be committed when they are run
     database_connection.autocommit = True
+
+    # check the two datasets have matching srid's
+    matching_srids = check_the_srid_of_the_data(database_connection, dataset, dataset_geom_field, areas_to_join, dataset_geom_field)
+
+    # if false, return an error to the user
+    if matching_srids is False:
+        return 'The two datasets have different SRIDs. Please correct this and try again'
+
+    # check to see what fields have been passed
+    oa, lad, gor = check_fields_to_join(fields_to_join)
 
     # create cursor to access database
     cursor = database_connection.cursor()
@@ -85,12 +149,17 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
         # if join result is to find a single area rather than multiple
         # create fields in dataset to join areas to
         # for field in fields_to_join:
-        cursor.execute(sql.SQL('ALTER TABLE {} ADD IF NOT EXISTS lad character varying;').format(sql.Identifier(dataset)))
-        cursor.execute(sql.SQL('ALTER TABLE {} ADD IF NOT EXISTS gor character varying;').format(sql.Identifier(dataset)))
+        if oa:
+            cursor.execute(sql.SQL('ALTER TABLE {} ADD IF NOT EXISTS oa character varying;').format(sql.Identifier(dataset)))
+        if lad:
+            cursor.execute(sql.SQL('ALTER TABLE {} ADD IF NOT EXISTS lad character varying;').format(sql.Identifier(dataset)))
+        if gor:
+            cursor.execute(sql.SQL('ALTER TABLE {} ADD IF NOT EXISTS gor character varying;').format(sql.Identifier(dataset)))
 
         # run spatial join
-        cursor.execute(sql.SQL('UPDATE {0} a SET lad = b.lad_code, gor = b.gor_code FROM ftables.{1} b WHERE ST_Intersects(b.{2}, a.geom);').format(sql.Identifier(dataset), sql.Identifier(areas_to_join), sql.Identifier(dataset_geom_field)))
+        if lad is True and gor is True and oa is False:
+            cursor.execute(sql.SQL('UPDATE {0} a SET lad = b.lad_code, gor = b.gor_code FROM ftables.{1} b WHERE ST_Intersects(b.{2}, a.geom);').format(sql.Identifier(dataset), sql.Identifier(areas_to_join), sql.Identifier(dataset_geom_field)))
+        elif lad is True and gor is True and oa is True:
+            cursor.execute(sql.SQL('UPDATE {0} a SET oa = b.oa_code, lad = b.lad_code, gor = b.gor_code FROM ftables.{1} b WHERE ST_Intersects(b.{2}, a.geom);').format(sql.Identifier(dataset), sql.Identifier(areas_to_join), sql.Identifier(dataset_geom_field)))
 
     return True
-
-print('here')
