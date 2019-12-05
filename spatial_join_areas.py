@@ -123,7 +123,7 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
     temp_table = '___temp'
 
     # delete temp table if it exists
-    cursor.execute("DROP TABLE IF EXISTS %s;", [temp_table])
+    cursor.execute(sql.SQL("DROP TABLE IF EXISTS {};").format(sql.Identifier(temp_table)))
 
     if join_multiple_areas:
         # run join
