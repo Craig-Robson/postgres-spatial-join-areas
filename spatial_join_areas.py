@@ -27,7 +27,7 @@ def check_fields_to_join(fields_to_join):
     return oa, lad, gor
 
 
-def get_srid(database_connection, table, geom)
+def get_srid(database_connection, table, geom):
     """Get the SRID of a dataset
     """
 
@@ -35,11 +35,19 @@ def get_srid(database_connection, table, geom)
     cursor = database_connection.cursor()
 
     # run query to get srid
-    cursor.execute(sql.SQL('SELECT ST_SRID(%s) FROM {} LIMIT 1').format(sql.Identifier(table)), [geom])
+    cursor.execute(sql.SQL('SELECT srid FROM public.geometry_columns WHERE f_table_name={}').format(sql.Literal(table)))
 
     # fetch query result
-    srid = cursor.fetchone()
+    res = cursor.fetchall()
 
+    # if more than one row returned, return an error
+    if len(res) > 1:
+        return 'More than one table with the same name: %s' % res
+    else:
+        # convert returned srid into an integer
+        srid = int(res[0][0])
+
+    # close cursor
     cursor.close()
 
     # return
@@ -52,14 +60,23 @@ def check_the_srid_of_the_data(database_connection, dataset_name, dataset_geom_f
     # get srid of dataset
     srid_data = get_srid(database_connection, dataset_name, dataset_geom_field)
 
+    # check the returned srid is not an error string
+    if isinstance(srid_data, str):
+        return False, srid_data
+
     # get srid of areas to join
     srid_join_areas = get_srid(database_connection, join_dataset, join_dataset_geom_field)
 
-    # compare srid's
+    # check the returned srid is not an error string
+    if isinstance(srid_data, str):
+        return False, srid_data
+
+    # compare srid's - return an error if they are not equal
     if srid_data != srid_join_areas:
-        return False
+        return False, 'The SRIDs for the two datasets do not match - they are required to.'
 
     return True
+
 
 def main(database_connection=None, connection_parameters=None, dataset='', join_multiple_areas=True, areas_to_join='', join_data_is_areas=True, fields_to_join=[], dataset_id_field='gid', join_areas_id_field='gid', dataset_geom_field='geom', join_areas_geom_field='geom'):
     """
@@ -87,8 +104,15 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
     matching_srids = check_the_srid_of_the_data(database_connection, dataset, dataset_geom_field, areas_to_join, dataset_geom_field)
 
     # if false, return an error to the user
-    if matching_srids is False:
-        return 'The two datasets have different SRIDs. Please correct this and try again'
+    if matching_srids is not True:
+
+        # get the length of the matching_srids - if greater than 1 it includes an error string
+        if len(matching_srids) > 1:
+            # An problem has been found when checking the SRIDs of the datasets
+            return 'Error!. %s' % matching_srids[1]
+        else:
+            # a generic error has occurred
+            return 'The two datasets have different SRIDs. Please correct this and try again'
 
     # check to see what fields have been passed
     oa, lad, gor = check_fields_to_join(fields_to_join)
@@ -98,28 +122,45 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
 
     temp_table = '___temp'
 
+    # delete temp table if it exists
+    cursor.execute("DROP TABLE IF EXISTS %s;", [temp_table])
+
     if join_multiple_areas:
         # run join
         if join_data_is_areas:
-            cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(st_area(st_intersection(b.{1}, t.{2})) / st_area(b.{3})) as coverage, ARRAY_AGG(t.geo_code) as lads, ARRAY_AGG(t.geo_code_gor) as gors INTO {9} FROM ftables.{4} t, {5} b WHERE st_intersects(b.{6}, t.{7}) GROUP BY b.{8};').format(
-                sql.Identifier(dataset_id_field),  # 0
-                sql.Identifier(dataset_geom_field),  # 1
-                sql.Identifier(join_areas_geom_field),  # 2
-                sql.Identifier(dataset_geom_field),  # 3
-                sql.Identifier(areas_to_join),  # 4
-                sql.Identifier(dataset),  # 5
-                sql.Identifier(dataset_geom_field),  # 6
-                sql.Identifier(join_areas_geom_field),  # 7
-                sql.Identifier(dataset_id_field),  # 8
-                sql.Identifier(temp_table)),  # 9
-                [])
+            if lad is True and gor is True and oa is False:
+                cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(st_area(st_intersection(b.{1}, t.{2})) / st_area(b.{3})) as coverage, ARRAY_AGG(distinct t.geo_code) as lads, ARRAY_AGG(distinct t.geo_code_gor) as gors INTO {9} FROM ftables.{4} t, {5} b WHERE st_intersects(b.{6}, t.{7}) GROUP BY b.{8};').format(
+                    sql.Identifier(dataset_id_field),  # 0
+                    sql.Identifier(dataset_geom_field),  # 1
+                    sql.Identifier(join_areas_geom_field),  # 2
+                    sql.Identifier(dataset_geom_field),  # 3
+                    sql.Identifier(areas_to_join),  # 4
+                    sql.Identifier(dataset),  # 5
+                    sql.Identifier(dataset_geom_field),  # 6
+                    sql.Identifier(join_areas_geom_field),  # 7
+                    sql.Identifier(dataset_id_field),  # 8
+                    sql.Identifier(temp_table)),  # 9
+                    [])
+            elif lad is True and gor is True and oa is True:
+                cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(st_area(st_intersection(b.{1}, t.{2})) / st_area(b.{3})) as coverage, ARRAY_AGG(distinct t.oa_code) as oas, ARRAY_AGG(distinct t.geo_code) as lads, ARRAY_AGG(distinct t.geo_code_gor) as gors INTO {9} FROM ftables.{4} t, {5} b WHERE st_intersects(b.{6}, t.{7}) GROUP BY b.{8};').format(
+                    sql.Identifier(dataset_id_field),  # 0
+                    sql.Identifier(dataset_geom_field),  # 1
+                    sql.Identifier(join_areas_geom_field),  # 2
+                    sql.Identifier(dataset_geom_field),  # 3
+                    sql.Identifier(areas_to_join),  # 4
+                    sql.Identifier(dataset),  # 5
+                    sql.Identifier(dataset_geom_field),  # 6
+                    sql.Identifier(join_areas_geom_field),  # 7
+                    sql.Identifier(dataset_id_field),  # 8
+                    sql.Identifier(temp_table)),  # 9
+                    [])
         else:
-            #print('Running line & point join')
             #cursor.execute(sql.SQL('SELECT b.{0} as gid INTO {2} FROM {1} b;').format(sql.Identifier('gid'), sql.Identifier(dataset), sql.Identifier('_temp')))
-            cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(t.geo_code) as lads, ARRAY_AGG(t.geo_code_gor) as gors INTO {5} FROM ftables.{1} t, {2} b WHERE st_intersects(b.{3}, t.{4}) GROUP BY b.{6};').format(
-		sql.Identifier(dataset_id_field), sql.Identifier(areas_to_join), sql.Identifier(dataset), sql.Identifier(dataset_geom_field), sql.Identifier(join_areas_geom_field), sql.Identifier(temp_table), sql.Identifier(dataset_id_field)))
+            if lad is True and gor is True and oa is False:
+                cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(distinct t.geo_code) as lads, ARRAY_AGG(distinct t.geo_code_gor) as gors INTO {5} FROM ftables.{1} t, {2} b WHERE st_intersects(b.{3}, t.{4} GROUP BY b.{6};').format(sql.Identifier(dataset_id_field), sql.Identifier(areas_to_join), sql.Identifier(dataset), sql.Identifier(dataset_geom_field), sql.Identifier(join_areas_geom_field), sql.Identifier(temp_table), sql.Identifier(dataset_id_field)))
+            elif lad is True and gor is True and oa is True:
+                cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(distinct t.oa_code) as oas, ARRAY_AGG(distinct t.geo_code) as lads, ARRAY_AGG(distinct t.geo_code_gor) as gors INTO {5} FROM ftables.{1} t, {2} b WHERE st_intersects(b.{3}, t.{4} GROUP BY b.{6};').format(sql.Identifier(dataset_id_field), sql.Identifier(areas_to_join), sql.Identifier(dataset), sql.Identifier(dataset_geom_field), sql.Identifier(join_areas_geom_field), sql.Identifier(temp_table), sql.Identifier(dataset_id_field)))
 
-        #print('Generated temp table')
         # create fields in dataset to join areas to
         #for field in fields_to_join:
         cursor.execute(sql.SQL('ALTER TABLE {} ADD IF NOT EXISTS lads character varying[];').format(sql.Identifier(dataset)))
@@ -138,8 +179,8 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
         cursor.execute(sql.SQL('UPDATE {0} as a SET lads = b.lads, gors = b.gors FROM {1} b WHERE a.{2} = b.gid;').format(sql.Identifier(dataset), sql.Identifier(temp_table), sql.Identifier(dataset_id_field)))
 
         # remote the temp tables
-        cursor.execute(sql.SQL('DROP INDEX IF EXISTS {0};').format(sql.Identifier(temp_table+'_gid_idx')), [])
-        cursor.execute(sql.SQL('DROP TABLE IF EXISTS {0};').format(sql.Identifier(temp_table)))
+        #cursor.execute(sql.SQL('DROP INDEX IF EXISTS {0};').format(sql.Identifier(temp_table+'_gid_idx')), [])
+        #cursor.execute(sql.SQL('DROP TABLE IF EXISTS {0};').format(sql.Identifier(temp_table)))
 
         # create index on new fields which are now populated
         cursor.execute(sql.SQL('CREATE INDEX IF NOT EXISTS {0} ON {1} USING gin(lads);').format(sql.Identifier(dataset+'_lads_idx'), sql.Identifier(dataset)), [])
