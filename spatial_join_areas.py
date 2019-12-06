@@ -203,4 +203,11 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
         elif lad is True and gor is True and oa is True:
             cursor.execute(sql.SQL('UPDATE {0} a SET oa = b.oa_code, lad = b.lad_code, gor = b.gor_code FROM ftables.{1} b WHERE ST_Intersects(b.{2}, a.geom);').format(sql.Identifier(dataset), sql.Identifier(areas_to_join), sql.Identifier(dataset_geom_field)))
 
+    # delete temp table if it exists
+    cursor.execute(sql.SQL("DROP TABLE IF EXISTS {};").format(sql.Identifier(temp_table)))
+
+    # close connection an cursor
+    cursor.close()
+    database_connection.close()
+
     return True
