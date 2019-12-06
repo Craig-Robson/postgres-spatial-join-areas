@@ -27,7 +27,7 @@ def check_fields_to_join(fields_to_join):
     return oa, lad, gor
 
 
-def get_srid(database_connection, table, geom):
+def get_srid(database_connection, table, geom_field):
     """Get the SRID of a dataset
     """
 
@@ -35,17 +35,23 @@ def get_srid(database_connection, table, geom):
     cursor = database_connection.cursor()
 
     # run query to get srid
-    cursor.execute(sql.SQL('SELECT srid FROM public.geometry_columns WHERE f_table_name={}').format(sql.Literal(table)))
+    cursor.execute(sql.SQL('SELECT srid FROM public.geometry_columns WHERE f_table_name={};').format(sql.Literal(table)))
 
     # fetch query result
     res = cursor.fetchall()
-
+   
     # if more than one row returned, return an error
     if len(res) > 1:
-        return 'More than one table with the same name: %s' % res
-    else:
-        # convert returned srid into an integer
-        srid = int(res[0][0])
+        cursor.execute(sql.SQL('SELECT srid FROM public.geometry_columns WHERE f_table_name={} and f_geometry_column={};').format(sql.Literal(table), sql.Literal(geom_field)))
+
+        # fetch query result
+        res = cursor.fetchall()
+
+        if len(res) > 1:
+            return 'More than one table with the same name: %s' % res
+
+    # convert returned srid into an integer
+    srid = int(res[0][0])
 
     # close cursor
     cursor.close()
@@ -101,7 +107,7 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
     database_connection.autocommit = True
 
     # check the two datasets have matching srid's
-    matching_srids = check_the_srid_of_the_data(database_connection, dataset, dataset_geom_field, areas_to_join, dataset_geom_field)
+    matching_srids = check_the_srid_of_the_data(database_connection, dataset, dataset_geom_field, areas_to_join, join_areas_geom_field)
 
     # if false, return an error to the user
     if matching_srids is not True:
