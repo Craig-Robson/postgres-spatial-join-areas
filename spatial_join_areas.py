@@ -12,6 +12,22 @@ def create_database_connection(db_params):
     return connection
 
 
+def check_data_exists(database_connection, data_name):
+    """
+    Check the named dataset exists. Returns True if exists, False if not.
+    """
+    # create cursor to access database
+    cursor = database_connection.cursor()
+
+    # run query to see if dataset exists
+    cursor.execute(sql.SQL('SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = {});').format(sql.Literal(data_name)))
+
+    res = cursor.fetchall()[0][0]
+
+    cursor.close()
+    return res
+
+
 def check_fields_to_join(fields_to_join):
     """Check which fields have been passed to be joined
     """
@@ -39,7 +55,7 @@ def get_srid(database_connection, table, geom_field):
 
     # fetch query result
     res = cursor.fetchall()
-   
+
     # if more than one row returned, return an error
     if len(res) > 1:
         cursor.execute(sql.SQL('SELECT srid FROM public.geometry_columns WHERE f_table_name={} and f_geometry_column={};').format(sql.Literal(table), sql.Literal(geom_field)))
@@ -105,6 +121,16 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
 
     # allow all calls to be committed when they are run
     database_connection.autocommit = True
+
+    # check the two datasets exist
+    exists = check_data_exists(database_connection, dataset)
+
+    if not exists:
+        return "Error! Could not fine the dataset %s" % dataset
+
+    exists = check_data_exists(database_connection, areas_to_join)
+    if not exists:
+        return "Error! Could not fine the join dataset %s" % areas_to_join
 
     # check the two datasets have matching srid's
     matching_srids = check_the_srid_of_the_data(database_connection, dataset, dataset_geom_field, areas_to_join, join_areas_geom_field)
