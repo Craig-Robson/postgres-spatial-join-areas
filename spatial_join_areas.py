@@ -186,12 +186,17 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
                     sql.Identifier(dataset_id_field),  # 8
                     sql.Identifier(temp_table)),  # 9
                     [])
+            else:
+                return 'Error! An intermediate step could not be completed. Please specify the spatial areas to be joined to the dataset.'
+
         else:
             #cursor.execute(sql.SQL('SELECT b.{0} as gid INTO {2} FROM {1} b;').format(sql.Identifier('gid'), sql.Identifier(dataset), sql.Identifier('_temp')))
             if lad is True and gor is True and oa is False:
                 cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(distinct t.geo_code) as lads, ARRAY_AGG(distinct t.geo_code_gor) as gors INTO {5} FROM ftables.{1} t, {2} b WHERE st_intersects(b.{3}, t.{4} GROUP BY b.{6};').format(sql.Identifier(dataset_id_field), sql.Identifier(areas_to_join), sql.Identifier(dataset), sql.Identifier(dataset_geom_field), sql.Identifier(join_areas_geom_field), sql.Identifier(temp_table), sql.Identifier(dataset_id_field)))
             elif lad is True and gor is True and oa is True:
                 cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(distinct t.oa_code) as oas, ARRAY_AGG(distinct t.geo_code) as lads, ARRAY_AGG(distinct t.geo_code_gor) as gors INTO {5} FROM ftables.{1} t, {2} b WHERE st_intersects(b.{3}, t.{4} GROUP BY b.{6};').format(sql.Identifier(dataset_id_field), sql.Identifier(areas_to_join), sql.Identifier(dataset), sql.Identifier(dataset_geom_field), sql.Identifier(join_areas_geom_field), sql.Identifier(temp_table), sql.Identifier(dataset_id_field)))
+            else:
+                return 'Error! An intermediate step could not be completed. Please specify the spatial areas to be joined to the dataset.'
 
         # create fields in dataset to join areas to
         #for field in fields_to_join:
