@@ -100,7 +100,7 @@ def check_the_srid_of_the_data(database_connection, dataset_name, dataset_geom_f
     return True
 
 
-def main(database_connection=None, connection_parameters=None, dataset='', join_multiple_areas=True, areas_to_join='', join_data_is_areas=True, fields_to_join=[], dataset_id_field='gid', join_areas_id_field='gid', dataset_geom_field='geom', join_areas_geom_field='geom'):
+def main(database_connection=None, connection_parameters=None, dataset='', join_multiple_areas=True, areas_to_join='', join_data_is_areas=True, fields_to_join=[], reference_fields=[], dataset_id_field='gid', join_areas_id_field='gid', dataset_geom_field='geom', join_areas_geom_field='geom'):
     """
     Run the spatial join over two tables existing in a postgres database.
 
@@ -157,6 +157,7 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
     # delete temp table if it exists
     cursor.execute(sql.SQL("DROP TABLE IF EXISTS {};").format(sql.Identifier(temp_table)))
 
+    # figure out which join to run and run
     if join_multiple_areas:
         # run join
         if join_data_is_areas:
@@ -171,10 +172,13 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
                     sql.Identifier(dataset_geom_field),  # 6
                     sql.Identifier(join_areas_geom_field),  # 7
                     sql.Identifier(dataset_id_field),  # 8
-                    sql.Identifier(temp_table)),  # 9
+                    sql.Identifier(temp_table),  # 9
+                    sql.Identifier(reference_fields[0]),  # 10
+                    sql.Identifier(reference_fields[1])  # 11
+                    ),
                     [])
             elif lad is True and gor is True and oa is True:
-                cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(st_area(st_intersection(b.{1}, t.{2})) / st_area(b.{3})) as coverage, ARRAY_AGG(distinct t.oa_code) as oas, ARRAY_AGG(distinct t.geo_code) as lads, ARRAY_AGG(distinct t.geo_code_gor) as gors INTO {9} FROM ftables.{4} t, {5} b WHERE st_intersects(b.{6}, t.{7}) GROUP BY b.{8};').format(
+                cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(st_area(st_intersection(b.{1}, t.{2})) / st_area(b.{3})) as coverage, ARRAY_AGG(distinct t.{10}) as oas, ARRAY_AGG(distinct t.{11}) as lads, ARRAY_AGG(distinct t.{12}) as gors INTO {9} FROM ftables.{4} t, {5} b WHERE st_intersects(b.{6}, t.{7}) GROUP BY b.{8};').format(
                     sql.Identifier(dataset_id_field),  # 0
                     sql.Identifier(dataset_geom_field),  # 1
                     sql.Identifier(join_areas_geom_field),  # 2
@@ -184,7 +188,11 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
                     sql.Identifier(dataset_geom_field),  # 6
                     sql.Identifier(join_areas_geom_field),  # 7
                     sql.Identifier(dataset_id_field),  # 8
-                    sql.Identifier(temp_table)),  # 9
+                    sql.Identifier(temp_table),  # 9
+                    sql.Identifier(reference_fields[0]),  # 10
+                    sql.Identifier(reference_fields[1]),  # 11
+                    sql.Identifier(reference_fields[2]),  # 12
+                    ),
                     [])
             else:
                 return 'Error! An intermediate step could not be completed. Please specify the spatial areas to be joined to the dataset.'
@@ -192,9 +200,33 @@ def main(database_connection=None, connection_parameters=None, dataset='', join_
         else:
             #cursor.execute(sql.SQL('SELECT b.{0} as gid INTO {2} FROM {1} b;').format(sql.Identifier('gid'), sql.Identifier(dataset), sql.Identifier('_temp')))
             if lad is True and gor is True and oa is False:
-                cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(distinct t.geo_code) as lads, ARRAY_AGG(distinct t.geo_code_gor) as gors INTO {5} FROM ftables.{1} t, {2} b WHERE st_intersects(b.{3}, t.{4} GROUP BY b.{6};').format(sql.Identifier(dataset_id_field), sql.Identifier(areas_to_join), sql.Identifier(dataset), sql.Identifier(dataset_geom_field), sql.Identifier(join_areas_geom_field), sql.Identifier(temp_table), sql.Identifier(dataset_id_field)))
+                cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(distinct t.{7}) as lads, ARRAY_AGG(distinct t.{8}) as gors INTO {5} FROM ftables.{1} t, {2} b WHERE st_intersects(b.{3}, t.{4} GROUP BY b.{6};').format(
+                    sql.Identifier(dataset_id_field),  # 0
+                    sql.Identifier(areas_to_join),   # 1
+                    sql.Identifier(dataset),  # 2
+                    sql.Identifier(dataset_geom_field),  # 3
+                    sql.Identifier(join_areas_geom_field),  # 4
+                    sql.Identifier(temp_table),  # 5
+                    sql.Identifier(dataset_id_field),  # 6
+                    sql.Identifier(reference_fields[0]),  # 7
+                    sql.Identifier(reference_fields[1]),  # 8
+                )
+                )
+
             elif lad is True and gor is True and oa is True:
-                cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(distinct t.oa_code) as oas, ARRAY_AGG(distinct t.geo_code) as lads, ARRAY_AGG(distinct t.geo_code_gor) as gors INTO {5} FROM ftables.{1} t, {2} b WHERE st_intersects(b.{3}, t.{4} GROUP BY b.{6};').format(sql.Identifier(dataset_id_field), sql.Identifier(areas_to_join), sql.Identifier(dataset), sql.Identifier(dataset_geom_field), sql.Identifier(join_areas_geom_field), sql.Identifier(temp_table), sql.Identifier(dataset_id_field)))
+                cursor.execute(sql.SQL('SELECT b.{0} as gid, ARRAY_AGG(distinct t.{7}) as oas, ARRAY_AGG(distinct t.{8}) as lads, ARRAY_AGG(distinct t.{9}) as gors INTO {5} FROM ftables.{1} t, {2} b WHERE st_intersects(b.{3}, t.{4} GROUP BY b.{6};').format(
+                    sql.Identifier(dataset_id_field),  # 0
+                    sql.Identifier(areas_to_join),  # 1
+                    sql.Identifier(dataset),  # 2
+                    sql.Identifier(dataset_geom_field),  # 3
+                    sql.Identifier(join_areas_geom_field),  # 4
+                    sql.Identifier(temp_table),  # 5
+                    sql.Identifier(dataset_id_field),  # 6
+                    sql.Identifier(reference_fields[0]),  # 7
+                    sql.Identifier(reference_fields[1]),  # 8
+                    sql.Identifier(reference_fields[2]),  # 9
+                )
+                )
             else:
                 return 'Error! An intermediate step could not be completed. Please specify the spatial areas to be joined to the dataset.'
 
